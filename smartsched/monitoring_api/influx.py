@@ -57,7 +57,9 @@ class InfluxHandler(object):
         'port': int,
         'dbname': str,
         'user': str,
-        'password': str
+        'password': str,
+        'ssl': bool,
+        'verify_ssl': bool
     }
 
     def is_config_ok(self, config):
@@ -68,9 +70,11 @@ class InfluxHandler(object):
         return True
 
     def __init__(self, config_dict):
-        self.client = InfluxDBClient(config_dict['host'], int(config_dict['port']),
-                                     config_dict['user'], config_dict['password'],
-                                     config_dict['dbname'])
+        self.client = InfluxDBClient(host=config_dict['host'], port=int(config_dict['port']),
+                                     username=config_dict['user'], password=config_dict['password'],
+                                     database=config_dict['dbname'],
+                                     ssl=True if config_dict['ssl'] == 'True' else False,
+                                     verify_ssl=True if config_dict['verify_ssl'] == 'True' else False)
 
     def get_ovz_vm(self, vm_id, metrics, limit=100):
         result = []
@@ -97,7 +101,6 @@ class InfluxHandler(object):
         if data != {}:
             for row in data['series']:
                 metric = row['tags']['metric'].split('_')
-                print(metric)
                 vms[int(metric[-1]) - 1000] = {str(metric[0]): float(row['values'][0][1])}
 
         query = "SELECT last(value) FROM check_openvz_vm_perf WHERE hostname='%s' AND metric =~ /mem_b_\d+/ AND time > now() - 3m GROUP BY metric" % hostname

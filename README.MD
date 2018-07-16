@@ -19,6 +19,7 @@ After successful installation it is important to write a configuration file for 
 It is important to give decent access right to user account which will be used in SmartScheduler-lib. For OpenNebula it is:
 1. Virtual Machines - All - use, admin
 2. Hosts, Clusters - All - use
+3. Host - All - manage
 
 ### Using pip3
 ```bash
@@ -37,6 +38,18 @@ cloud_handler = common.get_cloud_handler()
 monitoring_handler = cloud.get_monitoring_handler()
 
 vm_list = cloud_handler.get_vm_list()
+```
+
+It is highly recomended to enforce usage of certificates for your XML-RPC servers. In that case you will need to deal with local CAs. The following instructions work for the CentOS 7 installation which was used for the development and testing.
+
+```
+# Copy cert and update CAs
+cp xml-rpc.pem /etc/pki/ca-trust/source/anchors/.
+update-ca-trust extract && update-ca-trust enable
+# If you have built tls-ca-bundle.pem you can force Python3 to use it with the following command
+export REQUESTS_CA_BUNDLE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem 
+# This could turn off all warnings. Be carefull with that.
+export PYTHONWARNINGS="ignore"
 ```
 
 # For Developers

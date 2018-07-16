@@ -5,7 +5,7 @@ import xmlrpc.client  # Connect with XML RPC server
 import xmltodict  # Convert XML to Python Dict
 
 from smartsched.cloud_api import base_cloud
-from smartsched.cloud_api.one_constants import VM_STATES, LCM_STATES
+from smartsched.cloud_api.one_constants import HOST_STATES, VM_STATES, LCM_STATES
 
 
 def xml_to_dict(xml):
@@ -18,6 +18,10 @@ def init_handler(config_dict):
 
 
 class ONECloud(base_cloud.BaseCloud):
+
+    config = {
+        'active_hosts': ['MONITORED']
+    }
 
     required_params = {
         'username': str,
@@ -152,8 +156,8 @@ class ONECloud(base_cloud.BaseCloud):
         current['mem_req'] = int(vm['TEMPLATE']['MEMORY'])
         current['cpu_allocated'] = float(vm['TEMPLATE']['CPU']) * 100
         current['mem_allocated'] = int(vm['TEMPLATE']['MEMORY']) * 1024
-        current['mem_used'] = int(vm['MEMORY'])
-        current['cpu_used'] = int(vm['CPU'])
+        #current['mem_used'] = int(vm['MONITORING']['USEDMEMORY'])
+        #current['cpu_used'] = float(vm['MONITORING']['USEDCPU'])
 
         # HID - optional parameter, could be empty if VM was never running
         current['hid'] = -1
@@ -175,17 +179,26 @@ class ONECloud(base_cloud.BaseCloud):
         current['cluster_id'] = -1
         if 'DISK' in vm['TEMPLATE']:
             if isinstance(vm['TEMPLATE']['DISK'], list):
-                current['cluster_id'] = [int(disk['CLUSTER_ID']) for disk in vm['TEMPLATE']['DISK'] if 'CLUSTER_ID' in disk]
+                try:
+                    current['cluster_id'] = [int(disk['CLUSTER_ID']) for disk in vm['TEMPLATE']['DISK'] if 'CLUSTER_ID' in disk]
+                except Exception as e:
+                    current['cluster_id'] = None
             else:
-                current['cluster_id'] = [int(vm['TEMPLATE']['DISK']['CLUSTER_ID'])]
+                if 'CLUSTER_ID' in vm['TEMPLATE']['DISK']:
+                    if 'CLUSTER_ID' in vm['TEMPLATE']['DISK'] and not isinstance(vm['TEMPLATE']['DISK']['CLUSTER_ID'], list):
+                        try: 
+                            current['cluster_id'] = int(vm['TEMPLATE']['DISK']['CLUSTER_ID'])
+                        except ValueError:
+                            current['cluster_id'] = None
 
         current['template_id'] = -1
         if 'TEMPLATE_ID' in vm['TEMPLATE']:
             current['template_id'] = int(vm['TEMPLATE']['TEMPLATE_ID'])
 
         current['sched_message'] = ''
-        if 'SCHED_MESSAGE' in vm['USER_TEMPLATE']:
-            current['sched_message'] = str(vm['USER_TEMPLATE']['SCHED_MESSAGE'])
+        if ('USER_TEMPLATE' in vm) and (vm['USER_TEMPLATE'] is not None):
+            if 'SCHED_MESSAGE' in vm['USER_TEMPLATE']:
+                current['sched_message'] = str(vm['USER_TEMPLATE']['SCHED_MESSAGE'])
 
         return current
 
@@ -199,7 +212,7 @@ class ONECloud(base_cloud.BaseCloud):
         current['name'] = str(host['NAME'])
         current['state'] = int(host['STATE'])
         current['vm_mad'] = str(host['VM_MAD'])
-        current['vn_mad'] = str(host['VN_MAD'])
+        # current['vn_mad'] = str(host['VN_MAD'])
 
         cpu_allocated = int(host['HOST_SHARE']['CPU_USAGE'])
         cpu_max = int(host['HOST_SHARE']['MAX_CPU'])
@@ -309,15 +322,16 @@ class ONECloud(base_cloud.BaseCloud):
         result = []
         cluster_id = cluster_id[0] if isinstance(cluster_id, list) else cluster_id
         for host in hosts:
-            if host['cluster_id'] == cluster_id:
-                result.append(host)
+            if host['cluster_id'] != cluster_id:
+                continue
+            result.append(host)
         return result
 
     def get_pending_unscheduled(self):
         result = []
         pending_vm_list = self.get_vms_repr(vmStateFilter=1)
         for vm in pending_vm_list:
-            if 'No host meets SCHED_REQUIREMENTS' in vm['sched_message']:
+            if 'Not enough capacity in Host' in vm['sched_message']:
                 vm['notEnoughSpace'] = True
                 result.append(vm)
         return result
